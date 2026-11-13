@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **a track whose Spotify metadata fetch failed is no longer searched on YouTube.** The `Track <id>` / `Unknown Artist` stub used to go to yt-dlp and could land a random video; it is now reported as failed and retried on the next resume run.
+- **a cancelled run no longer counts the in-flight track as failed**, and the retry loop in `download_track_audio` stops as soon as cancel is set.
+- **single-track downloads now pass the same title/artist match guard as playlist tracks.**
+- **`config.json` is written atomically** (temp file + rename), and an undecodable config falls back to defaults instead of raising.
+- **CLI folder lock is created with `O_EXCL`**, so two simultaneous `sunnify download` runs cannot both claim a folder.
+- **web backend answers 400, not 500, for a malformed JSON body or a non-string `playlistUrl`.**
+
+### Added
+- **more link shapes are accepted:** `/embed/...`, legacy `/user/<name>/playlist/<id>`, `spotify:user:<name>:playlist:<id>`, and long locales such as `intl-pt-br`.
+- **a 429 now honours `Retry-After`** (capped at 60 s) instead of only the short exponential backoff.
+- **web client** trims pasted links, adds a missing `https://`, accepts `spotify:` URIs and shows the backend's own error message; it has a `npm test` (node:test) suite that CI runs.
+- `tests/test_version_sync.py` fails when a release bump misses a file.
+
+### Removed
+- unused `MusicScraper.download_http_file`.
+
 ## [2.4.1] - 2026-08-31
 
 ### Fixed

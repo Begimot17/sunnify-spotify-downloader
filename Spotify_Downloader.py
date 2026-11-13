@@ -1094,23 +1094,6 @@ class MusicScraper(QThread):
         log.debug("no playable audio landed for query set %r", queries)
         raise RuntimeError("no playable audio source found on YouTube for this track")
 
-    def download_http_file(self, url, destination):
-        response = self.session.get(url, stream=True, timeout=60)
-        response.raise_for_status()
-        total = int(response.headers.get("content-length", 0))
-        downloaded = 0
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        with open(destination, "wb") as handle:
-            for chunk in response.iter_content(chunk_size=8192):
-                if not chunk:
-                    continue
-                handle.write(chunk)
-                downloaded += len(chunk)
-                if total:
-                    progress = int(downloaded / total * 100)
-                    self.dlprogress_signal.emit(progress)
-        return destination
-
     def _download_one_track(self, track, playlist_folder_path, default_cover_url, track_num=0):
         """Download a single track. Runs inside a ThreadPoolExecutor worker.
 

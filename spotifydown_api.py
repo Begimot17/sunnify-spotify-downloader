@@ -48,7 +48,37 @@ class ExtractionError(SpotifyDownAPIError):
 
 
 class RateLimitError(SpotifyDownAPIError):
-    """Rate limited by Spotify - should back off before retrying."""
+    """Rate limited by Spotify - should back off before retrying.
+
+    `retry_after` is the server's Retry-After hint in seconds (already capped
+    by `_parse_retry_after`), or None when it sent none.
+    """
+
+    def __init__(self, message: str = "", retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+# never sleep longer than this on a server hint: the GUI/CLI worker is blocked
+# for the whole wait and a hostile or buggy header must not hang a run
+_MAX_RETRY_AFTER_S = 60.0
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Parse a Retry-After header given in delta-seconds; None if absent/invalid.
+
+    HTTP-date values are ignored (Spotify sends seconds), falling back to the
+    plain exponential backoff.
+    """
+    if not value:
+        return None
+    try:
+        seconds = float(value.strip())
+    except ValueError:
+        return None
+    if seconds != seconds or seconds < 0:  # NaN or negative
+        return None
+    return min(seconds, _MAX_RETRY_AFTER_S)
 
 
 class ContentUnavailableError(SpotifyDownAPIError):
@@ -84,6 +114,10 @@ def retry_on_network_error(
                     last_exception = e
                     if attempt < max_attempts - 1:
                         wait_time = backoff_factor * (2**attempt)
+                        # honour a server Retry-After when it asks for longer
+                        hint = getattr(e, "retry_after", None)
+                        if hint:
+                            wait_time = max(wait_time, hint)
                         log.warning(
                             "%s: %s (attempt %d/%d), backing off %.1fs",
                             func.__name__,
@@ -220,7 +254,10 @@ class SpotifyEmbedAPI:
 
         if response.status_code == 429:
             log.warning("spotify rate-limited (429): %s", url)
-            raise RateLimitError("Rate limited by Spotify - please wait before retrying")
+            raise RateLimitError(
+                "Rate limited by Spotify - please wait before retrying",
+                retry_after=_parse_retry_after(response.headers.get("Retry-After")),
+            )
         if response.status_code in (401, 403):
             raise ExtractionError(
                 f"Access denied (HTTP {response.status_code}) - playlist may be private"

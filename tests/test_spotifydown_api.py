@@ -961,3 +961,69 @@ class TestSpotifyUrlForms:
     def test_user_profile_url_is_still_invalid(self):
         with pytest.raises(ValueError):
             detect_spotify_url_type("https://open.spotify.com/user/someone")
+
+
+class TestRetryAfter:
+    def test_parse_retry_after(self):
+        from spotifydown_api import _MAX_RETRY_AFTER_S, _parse_retry_after
+
+        assert _parse_retry_after("7") == 7.0
+        assert _parse_retry_after(" 2.5 ") == 2.5
+        assert _parse_retry_after("0") == 0.0
+        assert _parse_retry_after(None) is None
+        assert _parse_retry_after("") is None
+        assert _parse_retry_after("Wed, 21 Oct 2026 07:28:00 GMT") is None
+        assert _parse_retry_after("-3") is None
+        assert _parse_retry_after("nan") is None
+        assert _parse_retry_after("999999") == _MAX_RETRY_AFTER_S
+
+    def test_decorator_sleeps_for_server_hint(self):
+        from unittest.mock import patch
+
+        from spotifydown_api import RateLimitError, retry_on_network_error
+
+        calls = []
+
+        @retry_on_network_error(max_attempts=3, backoff_factor=0.01, exceptions=(RateLimitError,))
+        def flaky():
+            calls.append(1)
+            if len(calls) < 3:
+                raise RateLimitError("slow down", retry_after=9.0)
+            return "ok"
+
+        with patch("spotifydown_api.time.sleep") as sleep:
+            assert flaky() == "ok"
+        assert [c.args[0] for c in sleep.call_args_list] == [9.0, 9.0]
+
+    def test_decorator_keeps_backoff_when_hint_is_shorter(self):
+        from unittest.mock import patch
+
+        from spotifydown_api import RateLimitError, retry_on_network_error
+
+        n = []
+
+        @retry_on_network_error(max_attempts=2, backoff_factor=4.0, exceptions=(RateLimitError,))
+        def flaky():
+            n.append(1)
+            if len(n) < 2:
+                raise RateLimitError("x", retry_after=1.0)
+            return 1
+
+        with patch("spotifydown_api.time.sleep") as sleep:
+            flaky()
+        assert sleep.call_args_list[0].args[0] == 4.0
+
+    def test_429_response_carries_header_into_error(self):
+        from unittest.mock import MagicMock, patch
+
+        from spotifydown_api import RateLimitError, SpotifyEmbedAPI
+
+        resp = MagicMock(status_code=429, headers={"Retry-After": "11"})
+        session = MagicMock()
+        session.get.return_value = resp
+        api = SpotifyEmbedAPI(session=session)
+        with patch("spotifydown_api.time.sleep") as sleep, pytest.raises(RateLimitError) as ei:
+            api._fetch_embed_data("https://open.spotify.com/embed/playlist/x")
+        assert ei.value.retry_after == 11.0
+        assert sleep.call_args_list[0].args[0] == 11.0
+        assert session.get.call_count == 4

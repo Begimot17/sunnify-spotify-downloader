@@ -155,7 +155,6 @@ class TestFolderLock:
         lock.release()
         assert not (tmp_path / cli._LOCK_NAME).exists()
 
-
     def test_second_acquire_in_other_process_is_refused(self, tmp_path):
         first = cli._FolderLock(str(tmp_path))
         assert first.acquire() is None

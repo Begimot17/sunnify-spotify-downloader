@@ -2867,7 +2867,6 @@ class TestSingleTrackFailureAccounting:
         s.scrape_track(self.URL, str(tmp_path))
         assert s._failed_tracks == []
 
-
     def test_title_and_artist_guard_is_passed_to_download(self, tmp_path):
         """Single tracks get the same wrong-video guard as playlist tracks."""
         s = self._scraper()

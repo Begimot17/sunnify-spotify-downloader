@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast, Toaster } from "react-hot-toast"
 import Image from "next/image"
+import { backendErrorMessage, normalizeSpotifyUrl } from "@/lib/spotify-url"
 
 interface Track {
   id: string
@@ -49,19 +50,14 @@ export default function SunnifyApp() {
   const [showBanner, setShowBanner] = useState(true)
 
   const handleProcess = async () => {
-    if (!playlistLink) {
+    if (!playlistLink.trim()) {
       toast.error("Please enter a Spotify URL")
       return
     }
 
     // validate by hostname, not substring: "evil.com/open.spotify.com" must not pass
-    let host = ""
-    try {
-      host = new URL(playlistLink).hostname
-    } catch {
-      host = ""
-    }
-    if (host !== "open.spotify.com") {
+    const spotifyUrl = normalizeSpotifyUrl(playlistLink)
+    if (!spotifyUrl) {
       toast.error("Invalid URL - must be from open.spotify.com")
       return
     }
@@ -80,11 +76,13 @@ export default function SunnifyApp() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ playlistUrl: playlistLink }),
+          body: JSON.stringify({ playlistUrl: spotifyUrl }),
         }
       )
 
-      if (!response.ok) throw new Error("Failed to process playlist")
+      if (!response.ok) {
+        throw new Error(await backendErrorMessage(response, "Failed to process playlist"))
+      }
 
       const result = await response.json()
 

@@ -35,6 +35,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "node --test lib/*.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "cd ../.. && husky web-app/sunnify-webclient/.husky || true"

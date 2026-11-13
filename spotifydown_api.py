@@ -872,13 +872,17 @@ class PlaylistClient:
 # Utility functions shared across desktop app and web backend
 
 
-# Accepts three input shapes Spotify ships in the wild:
+# Accepts the input shapes Spotify ships in the wild:
 #   1. Canonical:       https://open.spotify.com/{type}/{id}
 #   2. Locale-prefixed: https://open.spotify.com/intl-en/{type}/{id}
 #   3. URI:             spotify:{type}:{id}
+#   4. Embed:           https://open.spotify.com/embed/{type}/{id}
+#   5. Legacy user:     https://open.spotify.com/user/{name}/playlist/{id}
+#                       spotify:user:{name}:playlist:{id}
 # Any trailing ?si=... query params are tolerated.
 _SPOTIFY_ID_RE = re.compile(
-    r"(?:https?://open\.spotify\.com/(?:intl-[a-z]{2,}/)?|spotify:)"
+    r"(?:https?://open\.spotify\.com/(?:intl-[a-z0-9-]+/)?(?:embed/)?(?:user/[^/?#]+/)?"
+    r"|spotify:(?:user:[^:/?#]+:)?)"
     r"(?P<type>playlist|track|album)[/:](?P<id>[a-zA-Z0-9]+)"
 )
 

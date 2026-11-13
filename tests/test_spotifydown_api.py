@@ -935,3 +935,29 @@ class TestResilientExtraction:
                 api._cached_token = session_data.get("accessToken")
                 break
         assert api._cached_token == "tok_flat"
+
+
+class TestSpotifyUrlForms:
+    """Less common link shapes people paste from the wild."""
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            ("https://open.spotify.com/embed/playlist/abc123", ("playlist", "abc123")),
+            ("https://open.spotify.com/embed/track/abc123?utm_source=oembed", ("track", "abc123")),
+            ("https://open.spotify.com/user/someone/playlist/abc123?si=x", ("playlist", "abc123")),
+            ("spotify:user:someone:playlist:abc123", ("playlist", "abc123")),
+            ("https://open.spotify.com/intl-pt-br/track/abc123", ("track", "abc123")),
+            ("https://open.spotify.com/intl-de/embed/album/abc123", ("album", "abc123")),
+        ],
+    )
+    def test_detects(self, url, expected):
+        assert detect_spotify_url_type(url) == expected
+
+    def test_extract_playlist_id_from_legacy_user_url(self):
+        url = "https://open.spotify.com/user/spotify/playlist/37i9dQZF1DXcBWIGoYBM5M"
+        assert extract_playlist_id(url) == "37i9dQZF1DXcBWIGoYBM5M"
+
+    def test_user_profile_url_is_still_invalid(self):
+        with pytest.raises(ValueError):
+            detect_spotify_url_type("https://open.spotify.com/user/someone")

@@ -411,19 +411,32 @@ def load_config() -> dict:
         if isinstance(data.get("star_prompt_shown"), bool):
             defaults["star_prompt_shown"] = data["star_prompt_shown"]
         return defaults
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
+        # ValueError covers JSONDecodeError and UnicodeDecodeError (a config
+        # clobbered with binary garbage must fall back to defaults, not crash)
         return defaults
 
 
 def save_config(config: dict) -> None:
-    """Persist user config to disk. Best-effort, swallows IO errors."""
+    """Persist user config to disk. Best-effort, swallows IO errors.
+
+    Written to a temp file and renamed over the target, so a crash or full
+    disk mid-write cannot leave a truncated config.json (which load_config
+    would silently replace with defaults, losing every setting)."""
     import json
 
+    tmp = None
     try:
-        with open(_config_path(), "w", encoding="utf-8") as f:
+        path = _config_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
-    except OSError as exc:
+        os.replace(tmp, path)
+    except (OSError, TypeError, ValueError) as exc:
         log.warning("could not save config: %s", exc)
+        if tmp:
+            with contextlib.suppress(OSError):
+                os.remove(tmp)
 
 
 GITHUB_REPO = "sunnypatell/sunnify-spotify-downloader"

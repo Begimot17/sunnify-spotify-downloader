@@ -3590,3 +3590,40 @@ class TestStarPrompt:
         QTest.keyClick(dlg, Qt.Key.Key_Escape)
         assert dlg.result() == QDialog.DialogCode.Rejected
         assert not dlg.isVisible()
+
+
+class TestConfigPersistence:
+    def test_roundtrip(self, tmp_path):
+        import Spotify_Downloader as sd
+
+        cfg_file = tmp_path / "config.json"
+        with patch.object(sd, "_config_path", return_value=str(cfg_file)):
+            cfg = sd.load_config()
+            cfg["format"] = "flac"
+            sd.save_config(cfg)
+            assert sd.load_config()["format"] == "flac"
+        assert not (tmp_path / "config.json.tmp").exists()
+
+    def test_failed_write_keeps_previous_config(self, tmp_path):
+        import json
+
+        import Spotify_Downloader as sd
+
+        cfg_file = tmp_path / "config.json"
+        cfg_file.write_text(json.dumps({"format": "flac"}), encoding="utf-8")
+        with (
+            patch.object(sd, "_config_path", return_value=str(cfg_file)),
+            patch("json.dump", side_effect=OSError("disk full")),
+        ):
+            sd.save_config({"format": "wav"})
+        assert json.loads(cfg_file.read_text(encoding="utf-8")) == {"format": "flac"}
+        assert not (tmp_path / "config.json.tmp").exists()
+
+    def test_binary_garbage_config_falls_back_to_defaults(self, tmp_path):
+        import Spotify_Downloader as sd
+
+        cfg_file = tmp_path / "config.json"
+        cfg_file.write_bytes(b"\xff\xfe\x00\x80garbage")
+        with patch.object(sd, "_config_path", return_value=str(cfg_file)):
+            cfg = sd.load_config()
+        assert cfg["star_prompt_shown"] is False

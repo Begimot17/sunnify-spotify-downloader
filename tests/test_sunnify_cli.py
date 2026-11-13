@@ -156,6 +156,31 @@ class TestFolderLock:
         assert not (tmp_path / cli._LOCK_NAME).exists()
 
 
+    def test_second_acquire_in_other_process_is_refused(self, tmp_path):
+        first = cli._FolderLock(str(tmp_path))
+        assert first.acquire() is None
+        other_pid = os.getpid() + 1
+        with patch.object(cli, "_read_lock_pid", return_value=other_pid):
+            err = cli._FolderLock(str(tmp_path)).acquire()
+        assert err and str(other_pid) in err
+        # the winner's lockfile is untouched by the refused attempt
+        assert (tmp_path / cli._LOCK_NAME).read_text() == str(os.getpid())
+        first.release()
+
+    def test_unreadable_lock_is_treated_as_stale(self, tmp_path):
+        (tmp_path / cli._LOCK_NAME).write_text("not a pid")
+        lock = cli._FolderLock(str(tmp_path))
+        assert lock.acquire() is None
+        assert (tmp_path / cli._LOCK_NAME).read_text() == str(os.getpid())
+        lock.release()
+
+    def test_reacquire_by_same_pid_is_ok(self, tmp_path):
+        lock = cli._FolderLock(str(tmp_path))
+        assert lock.acquire() is None
+        assert lock.acquire() is None
+        lock.release()
+
+
 class TestConfigCommand:
     def _run(self, tmp_path, *set_pairs, as_json=False):
         cfg_file = tmp_path / "config.json"

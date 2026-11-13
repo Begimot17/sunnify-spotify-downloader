@@ -164,12 +164,30 @@ class _FolderLock:
         self.folder = folder
 
     def acquire(self) -> str | None:
-        """Return an error message, or None once the lock is held."""
-        pid = _read_lock_pid(self.folder)
-        if pid is not None and pid != os.getpid():
-            return f"another sunnify download (pid {pid}) is writing to this folder"
-        with contextlib.suppress(OSError), open(self.path, "w", encoding="utf-8") as fh:
-            fh.write(str(os.getpid()))
+        """Return an error message, or None once the lock is held.
+
+        The lockfile is created with O_EXCL so two runs starting together
+        cannot both pass a read-then-write check; a lock whose pid is dead
+        (or unreadable) is removed and the create retried once.
+        """
+        for _ in range(2):
+            try:
+                fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+            except FileExistsError:
+                pid = _read_lock_pid(self.folder)
+                if pid is not None and pid != os.getpid():
+                    return f"another sunnify download (pid {pid}) is writing to this folder"
+                if pid is None:
+                    with contextlib.suppress(OSError):
+                        os.remove(self.path)  # stale: owner is gone
+                    continue
+                # our own pid already holds it (re-entrant): nothing to do
+                return None
+            except OSError:
+                return None  # folder not lockable: best effort, as before
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(str(os.getpid()))
+            return None
         return None
 
     def release(self) -> None:

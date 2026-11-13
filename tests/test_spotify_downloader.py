@@ -2843,6 +2843,28 @@ class TestSingleTrackFailureAccounting:
         assert s._failed_tracks == []
 
 
+    def test_title_and_artist_guard_is_passed_to_download(self, tmp_path):
+        """Single tracks get the same wrong-video guard as playlist tracks."""
+        s = self._scraper()
+        seen = {}
+
+        def capture(*_a, **kw):
+            seen.update(kw)
+            return None
+
+        s.download_track_audio = capture
+        s.scrape_track(self.URL, str(tmp_path))
+        assert seen["expected_title"] == "T"
+        assert seen["expected_artists"] == "A"
+
+    def test_cancelled_single_track_is_not_a_failure(self, tmp_path):
+        s = self._scraper()
+        s._cancel_event.set()
+        s.download_track_audio = lambda *_a, **_k: None
+        s.scrape_track(self.URL, str(tmp_path))
+        assert s._failed_tracks == []
+
+
 class TestNetworkBlockNotice:
     """YouTube's bot gate hits every track at once, so it gets said once,
     in words, instead of N generic per-track failures (v2.4.1)."""

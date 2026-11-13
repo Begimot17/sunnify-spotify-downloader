@@ -1549,10 +1549,18 @@ class MusicScraper(QThread):
         search_query = f"ytsearch1:{track_title} {artists} audio"
         expected_dur = (track.duration_ms / 1000) if track.duration_ms else None
         try:
+            # same title/artist match guard as the playlist path, so a single
+            # track does not silently grab a wrong-song video
             final_path = self.download_track_audio(
-                search_query, filepath, expected_duration_s=expected_dur
+                search_query,
+                filepath,
+                expected_duration_s=expected_dur,
+                expected_title=track_title,
+                expected_artists=artists,
             )
         except Exception as error_status:
+            if self.is_cancelled():
+                return
             error_msg = self._get_user_friendly_error(error_status, track_title)
             log.error("single-track download failed: '%s'", track_title, exc_info=True)
             # record it: the CLI derives its failure count and exit code from
@@ -1563,6 +1571,8 @@ class MusicScraper(QThread):
             return
 
         if not final_path or not os.path.exists(final_path):
+            if self.is_cancelled():
+                return
             log.warning("single-track produced no audio file: '%s'", track_title)
             with self._failed_lock:
                 self._failed_tracks.append(track_title)

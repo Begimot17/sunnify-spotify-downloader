@@ -95,6 +95,23 @@ class TestScrapePlaylistEndpoint:
         )
         assert response.status_code == 400
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"data": "not json", "content_type": "application/json"},
+            {"data": "not json", "content_type": "text/plain"},
+            {"json": ["a", "list"]},
+            {"json": None},
+            {"json": {"playlistUrl": 123}},
+            {"json": {"playlistUrl": None}},
+        ],
+    )
+    def test_malformed_body_returns_400_not_500(self, client, kwargs):
+        """A bad body or non-string url is a client error, never a 500."""
+        response = client.post("/api/scrape-playlist", **kwargs)
+        assert response.status_code == 400
+        assert response.get_json()["event"] == "error"
+
     def test_invalid_url_returns_400(self, client):
         """Invalid Spotify URL should return 400."""
         response = client.post(

@@ -404,8 +404,8 @@ class SpotifyEmbedAPI:
                     if resp.status_code == 200:
                         spc_data = resp.json()
                         track_count = spc_data.get("length", track_count)
-            except Exception:
-                pass  # Fall back to embed count
+            except Exception as exc:
+                log.warning("spclient track-count lookup failed, using embed count: %s", exc)
 
         return PlaylistInfo(
             name=str(name),
@@ -571,8 +571,8 @@ class SpotifyEmbedAPI:
             finally:
                 pool.shutdown(wait=False, cancel_futures=True)
 
-        except Exception:
-            pass  # spclient fallback failed, just return what we have
+        except Exception as exc:
+            log.warning("spclient track listing failed, returning embed tracks only: %s", exc)
 
     def _parse_track(self, track: dict, track_id: str) -> TrackInfo:
         """Parse a track dict from embed trackList."""

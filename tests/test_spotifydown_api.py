@@ -1065,3 +1065,57 @@ def test_failed_metadata_fetch_yields_flagged_placeholder():
     assert tracks["p1"].metadata_missing is False
     assert tracks["s2"].metadata_missing is True
     assert tracks["s3"].title == "Track s3"
+
+
+class TestSpclientFailureHandling:
+    """spclient failures must degrade to embed-only results and be logged."""
+
+    @staticmethod
+    def _api_with_embed():
+        import requests
+
+        api = SpotifyEmbedAPI()
+        embed = {
+            "props": {
+                "pageProps": {
+                    "state": {
+                        "data": {
+                            "entity": {
+                                "trackList": [
+                                    {"uri": "spotify:track:a1", "title": "A1", "subtitle": "X"}
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        api._fetch_embed_data = lambda _url: embed  # type: ignore[assignment]
+        api._cached_token = "tok"
+
+        def boom(*_a, **_kw):
+            raise requests.ConnectionError("down")
+
+        api._session.get = boom  # type: ignore[assignment]
+        return api
+
+    def test_iter_tracks_returns_embed_tracks_and_logs_on_connection_error(self, caplog):
+        api = self._api_with_embed()
+        with caplog.at_level("WARNING", logger="sunnify.api"):
+            tracks = list(api.iter_playlist_tracks("PL", content_type="playlist"))
+        assert [t.id for t in tracks] == ["a1"]
+        assert any("spclient track listing failed" in r.message for r in caplog.records)
+
+    def test_iter_tracks_survives_invalid_spclient_json(self):
+        api = self._api_with_embed()
+
+        class BadResp:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                raise ValueError("not json")
+
+        api._session.get = lambda *_a, **_kw: BadResp()  # type: ignore[assignment]
+        tracks = list(api.iter_playlist_tracks("PL", content_type="playlist"))
+        assert [t.id for t in tracks] == ["a1"]

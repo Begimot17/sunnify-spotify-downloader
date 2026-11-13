@@ -1047,6 +1047,8 @@ class MusicScraper(QThread):
         attempts = [("default", ydl_opts), ("fallback", fallback_opts)]
 
         for query in queries:
+            if self.is_cancelled():
+                return None  # stop retrying a track the user already abandoned
             video_url = self._select_youtube_match(
                 query,
                 expected_duration_s,
@@ -1056,6 +1058,8 @@ class MusicScraper(QThread):
             if not video_url:
                 continue
             for label, opts in attempts:
+                if self.is_cancelled():
+                    return None
                 # per-attempt bridge captures yt-dlp's own error even when
                 # ignoreerrors swallows it (no exception, no file)
                 ytlog = _YtdlpLog()
@@ -1210,6 +1214,8 @@ class MusicScraper(QThread):
                     expected_artists=artists,
                 )
             except Exception as error_status:
+                if self.is_cancelled():
+                    return None  # an aborted run is not a failed track
                 error_msg = self._get_user_friendly_error(error_status, track_title)
                 self.error_signal.emit(error_msg)
                 # concise reason at WARNING (the per-attempt yt-dlp reason is
@@ -1222,6 +1228,8 @@ class MusicScraper(QThread):
                 return track_title
 
             if not final_path or not os.path.exists(final_path):
+                if self.is_cancelled():
+                    return None  # cancelled mid-track: neither a failure nor a landed file
                 self.error_signal.emit(f"'{track_title}' - download failed")
                 log.warning(
                     "track produced no audio file (no confident match or blocked): '%s'",

@@ -1882,6 +1882,71 @@ class TestCoverEnrichment:
         mock_api.get_track.assert_not_called()
         scraper.download_track_audio.assert_not_called()
 
+    def test_cancel_mid_download_is_not_recorded_as_failure(self, tmp_path):
+        """A track aborted by cancel returns None and is not added to the failed list."""
+        from Spotify_Downloader import MusicScraper
+
+        cancel = threading.Event()
+        scraper = MusicScraper(cancel_event=cancel)
+        self._stub_scraper_signals(scraper)
+
+        def _abort(*_a, **_kw):
+            cancel.set()
+            return None
+
+        scraper.download_track_audio = _abort
+        scraper.spotifydown_api = MagicMock()
+
+        result = scraper._download_one_track(self._track(cover="c"), str(tmp_path), "fallback")
+        assert result is None
+        assert scraper._failed_tracks == []
+        scraper.error_signal.emit.assert_not_called()
+
+    def test_cancel_mid_download_exception_is_not_recorded_as_failure(self, tmp_path):
+        from Spotify_Downloader import MusicScraper
+
+        cancel = threading.Event()
+        scraper = MusicScraper(cancel_event=cancel)
+        self._stub_scraper_signals(scraper)
+
+        def _boom(*_a, **_kw):
+            cancel.set()
+            raise RuntimeError("interrupted")
+
+        scraper.download_track_audio = _boom
+        scraper.spotifydown_api = MagicMock()
+
+        assert scraper._download_one_track(self._track(cover="c"), str(tmp_path), "fb") is None
+        assert scraper._failed_tracks == []
+
+    def test_real_failure_is_still_recorded(self, tmp_path):
+        from Spotify_Downloader import MusicScraper
+
+        scraper = MusicScraper()
+        self._stub_scraper_signals(scraper)
+        scraper.download_track_audio = MagicMock(return_value=None)
+        scraper.spotifydown_api = MagicMock()
+
+        track = self._track(cover="c")
+        assert scraper._download_one_track(track, str(tmp_path), "fb") == track.title
+        assert scraper._failed_tracks == [track.title]
+
+    def test_download_track_audio_stops_retrying_once_cancelled(self, tmp_path):
+        from Spotify_Downloader import MusicScraper
+
+        cancel = threading.Event()
+        cancel.set()
+        scraper = MusicScraper(cancel_event=cancel)
+        scraper._select_youtube_match = MagicMock(return_value="https://youtu.be/x")
+        with (
+            patch("Spotify_Downloader.get_ffmpeg_path", return_value="ffmpeg"),
+            patch("Spotify_Downloader.YoutubeDL") as ydl,
+        ):
+            out = scraper.download_track_audio("ytsearch1:a b audio", str(tmp_path / "a.mp3"))
+        assert out is None
+        scraper._select_youtube_match.assert_not_called()
+        ydl.assert_not_called()
+
     def test_enrichment_preserves_existing_release_date(self, tmp_path):
         """If the track already has release_date, enrichment shouldn't clobber it."""
         from Spotify_Downloader import MusicScraper

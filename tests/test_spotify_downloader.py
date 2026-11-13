@@ -1919,6 +1919,31 @@ class TestCoverEnrichment:
         assert scraper._download_one_track(self._track(cover="c"), str(tmp_path), "fb") is None
         assert scraper._failed_tracks == []
 
+    def test_placeholder_track_is_failed_without_youtube_search(self, tmp_path):
+        """A stub whose metadata fetch failed must not trigger a YouTube search."""
+        from Spotify_Downloader import MusicScraper
+        from spotifydown_api import TrackInfo
+
+        scraper = MusicScraper()
+        self._stub_scraper_signals(scraper)
+        scraper.download_track_audio = MagicMock()
+        scraper.spotifydown_api = MagicMock()
+        stub = TrackInfo(
+            id="zz1",
+            title="Track zz1",
+            artists="Unknown Artist",
+            album=None,
+            release_date=None,
+            cover_url=None,
+            duration_ms=None,
+            preview_url=None,
+            raw={"uri": "spotify:track:zz1", "metadata_missing": True},
+        )
+        assert scraper._download_one_track(stub, str(tmp_path), "fb") == "Track zz1"
+        assert scraper._failed_tracks == ["Track zz1"]
+        scraper.download_track_audio.assert_not_called()
+        scraper.error_signal.emit.assert_called_once()
+
     def test_real_failure_is_still_recorded(self, tmp_path):
         from Spotify_Downloader import MusicScraper
 

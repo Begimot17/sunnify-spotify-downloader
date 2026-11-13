@@ -166,6 +166,13 @@ class TrackInfo:
         """Alias for id field for compatibility."""
         return self.id
 
+    @property
+    def metadata_missing(self) -> bool:
+        """True for a stub whose per-track metadata fetch failed (title/artist
+        are placeholders). Searching YouTube for "Track <id> Unknown Artist"
+        would download a random video, so downloaders must not."""
+        return bool(self.raw.get("metadata_missing"))
+
 
 class SpotifyEmbedAPI:
     """Fetch playlist data from Spotify's embed page.
@@ -557,7 +564,7 @@ class SpotifyEmbedAPI:
                             cover_url=None,
                             duration_ms=None,
                             preview_url=None,
-                            raw={"uri": uri},
+                            raw={"uri": uri, "metadata_missing": True},
                         )
                     info.position = position_map.get(track_id)
                     yield info

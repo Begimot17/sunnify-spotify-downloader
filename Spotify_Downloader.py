@@ -1114,6 +1114,19 @@ class MusicScraper(QThread):
 
         track_title = track.title
         artists = track.artists
+
+        if getattr(track, "metadata_missing", False):
+            # the per-track metadata fetch failed (rate limit/network), so the
+            # title is a placeholder: a YouTube search for it would land a
+            # random video. Fail the track; a re-run resumes and retries it.
+            msg = f"'{track_title}' - Spotify metadata unavailable, re-run to retry"
+            self.error_signal.emit(msg)
+            log.warning("track metadata unavailable, not searching YouTube: %s", track.id)
+            with self._failed_lock:
+                self._failed_tracks.append(track_title)
+            self._finish_track_ui(ok=False)
+            return track_title
+
         sanitized_title = self.sanitize_text(track_title)
         sanitized_artists = self.sanitize_text(artists)
 

@@ -1027,3 +1027,41 @@ class TestRetryAfter:
         assert ei.value.retry_after == 11.0
         assert sleep.call_args_list[0].args[0] == 11.0
         assert session.get.call_count == 4
+
+
+def test_failed_metadata_fetch_yields_flagged_placeholder():
+    """A track whose /embed/track fetch fails is yielded as a flagged stub so
+    the downloader can refuse to search YouTube for 'Track <id>'."""
+    api = SpotifyEmbedAPI()
+    embed = {
+        "props": {
+            "pageProps": {
+                "state": {"data": {"entity": {"trackList": [{"uri": "spotify:track:p1"}]}}}
+            }
+        }
+    }
+    api._fetch_embed_data = lambda _url: embed  # type: ignore[assignment]
+    api._cached_token = "tok"
+    api._fetch_track_metadata = lambda _tid: None  # type: ignore[assignment]
+
+    class FakeResp:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "length": 3,
+                "contents": {
+                    "items": [
+                        {"uri": "spotify:track:p1"},
+                        {"uri": "spotify:track:s2"},
+                        {"uri": "spotify:track:s3"},
+                    ]
+                },
+            }
+
+    api._session.get = lambda *_a, **_kw: FakeResp()  # type: ignore[assignment]
+    tracks = {t.id: t for t in api.iter_playlist_tracks("PL")}
+    assert tracks["p1"].metadata_missing is False
+    assert tracks["s2"].metadata_missing is True
+    assert tracks["s3"].title == "Track s3"
